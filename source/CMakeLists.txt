@@ -1,3 +1,19 @@
+add_executable(client client.cpp)
+target_link_libraries(client framework)
+install(TARGETS client DESTINATION bin)
+
+add_executable(server server.cpp)
+target_link_libraries(server framework)
+install(TARGETS server DESTINATION bin)
+
+add_executable(pub_server pub_server.cpp)
+target_link_libraries(pub_server framework)
+install(TARGETS pub_server DESTINATION bin)
+
+add_executable(sub_client sub_client.cpp)
+target_link_libraries(sub_client framework)
+install(TARGETS sub_client DESTINATION bin)
+
 add_executable(measure_pose_offset measure_pose_offset.cpp)
 target_link_libraries(measure_pose_offset framework)
 install(TARGETS measure_pose_offset DESTINATION bin)
@@ -5,10 +21,6 @@ install(TARGETS measure_pose_offset DESTINATION bin)
 add_executable(zmq_sender zmq_sender.cpp)
 target_link_libraries(zmq_sender framework)
 install(TARGETS zmq_sender DESTINATION bin)
-
-add_executable(feedback_sender feedback_sender.cpp)
-target_link_libraries(feedback_sender framework)
-install(TARGETS feedback_sender DESTINATION bin)
 
 add_executable(zmq_receiver zmq_receiver.cpp)
 target_link_libraries(zmq_receiver framework)
@@ -70,14 +82,6 @@ add_executable(record record.cpp)
 target_link_libraries(record framework)
 install(TARGETS record DESTINATION bin)
 
-add_executable(remote_recorder remote_recorder.cpp)
-target_link_libraries(remote_recorder framework)
-install(TARGETS remote_recorder DESTINATION bin)
-
-add_executable(remote_player remote_player.cpp)
-target_link_libraries(remote_player framework)
-install(TARGETS remote_player DESTINATION bin)
-
 add_executable(play play.cpp)
 target_link_libraries(play framework)
 install(TARGETS play DESTINATION bin)
@@ -102,14 +106,6 @@ add_executable(voxelizer voxelizer.cpp)
 target_link_libraries(voxelizer framework)
 install(TARGETS voxelizer DESTINATION bin)
 
-add_executable(uncompress_recording uncompress_recording.cpp)
-target_link_libraries(uncompress_recording framework)
-install(TARGETS uncompress_recording DESTINATION bin)
-
-add_executable(zmq_point_cloud_sender zmq_point_cloud_sender.cpp)
-target_link_libraries(zmq_point_cloud_sender framework)
-install(TARGETS zmq_point_cloud_sender DESTINATION bin)
 
 #install(DIRECTORY . DESTINATION bin FILES_MATCHING PATTERN "poseoffset")
 #install(DIRECTORY . DESTINATION bin FILES_MATCHING PATTERN "click_x.wav")
-
