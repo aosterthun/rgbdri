@@ -5,10 +5,14 @@
 #include "zmq.hpp"
 #include <memory>
 #include <stdio.h>
+#include <FileBuffer.hpp>
+#include <ChronoMeter.hpp>
 #include <string>
 #include <vector>
 #include "helpers.hpp"
 #include <iostream>
+
+#define MAX_FRAMES_TO_RECORD 1800
 
 class Record{
 public:
@@ -21,6 +25,7 @@ public:
 
   Record(std::string const& filename,std::string const& stream_endpoint, int number_rgbd_sensors,int duration,bool compressed, std::string const& backchannel_endpoint = "default");
   void start();
+  void stop();
   std::string to_string();
   static Record from_string(std::string const& record_string);
 
@@ -34,6 +39,7 @@ private:
 
   void init_req();
   void init_rep();
+
 
 };
 

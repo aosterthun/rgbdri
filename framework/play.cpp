@@ -107,33 +107,66 @@ void Play::execute(){
   auto rep_thread = std::thread(&Play::init_rep,this);
   rep_thread.detach();
 
-  auto _ctx = zmq::context_t(1);
-  auto _skt = zmq::socket_t(_ctx, ZMQ_PUB);
-  _skt.bind("tcp://"+stream_endpoint);
+  const unsigned colorsize = compressed ? 691200 : 1280 * 1080 * 3;
+  const unsigned depthsize = 512 * 424 * sizeof(float);
+  const unsigned framesize = (colorsize + depthsize) * number_rgbd_sensors;
+  double frametime = 0;
+  double last_frame_time = 0;
+  FileBuffer* fb = nullptr;
+  size_t framecounter = 0;
+  size_t num_frames = 0;
 
-  int i = 0;
-  while(is_running) {
-    if(!is_paused) {
-      while(i < 30){
-        if(is_paused or !is_running){
-          break;
+  zmq::socket_t  socket(*ctx.get(), ZMQ_PUB);
+  uint32_t hwm = 1;
+  socket.setsockopt(ZMQ_SNDHWM,&hwm, sizeof(hwm));
+  std::string endpoint("tcp://" + stream_endpoint);
+  socket.bind(endpoint.c_str());
+
+  if(fb != nullptr){
+    fb->close();
+    delete fb;
+    fb = nullptr;
+  }
+
+  fb = new FileBuffer(filename.c_str());
+  if(!fb->open("r", 0)){
+    m_logger->critical("error opening {0:s} exiting...",filename);
+    exit(0);
+  }
+  fb->setLooping(loop);
+
+  framecounter = 0;
+
+  num_frames = fb->getFileSizeBytes()/framesize;
+
+  while (is_running) {
+    if(!is_paused){
+      zmq::message_t zmqm(framesize);
+      fb->read((unsigned char*) zmqm.data(), framesize);
+      memcpy((char*) &frametime, (const char*) zmqm.data(), sizeof(double));
+
+      const double elapsed_frame_time = frametime - last_frame_time;
+      last_frame_time = frametime;
+      const unsigned sleep_time = std::min(100u, std::max(0u, (unsigned)((elapsed_frame_time) * 1000u)));
+      if(framecounter > 1){
+          std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time));
+      }
+
+      socket.send(zmqm);
+      ++framecounter;
+      if(framecounter >= num_frames){
+        if(loop){
+          m_logger->info("loop: restart stream");
+          framecounter = 0;
         }
-        ssend(_skt,"working " + std::to_string(i));
-        m_logger->info("working {0:d}",i);
-        sleep(1);
-
-        i++;
+        else{
+          m_logger->info("stop play since end reached");
+          is_running = false;
+        }
       }
     }
   }
 
-  // for (size_t i = 0; i < 1000; i++) {
-  //   if(!is_running){
-  //     break;
-  //   }
-  //   m_logger->info("working {0:d}",i);
-  //   sleep(1);
-  // }
   m_logger->debug("[END] void Play::execute()");
 };
 
@@ -178,21 +211,21 @@ void Play::resume(){
 std::string Play::to_string(){
   std::string output;
 
-  output += filename + "_";
-  output += std::to_string(loop) + "_";
-  output += std::to_string(number_rgbd_sensors) + "_";
-  output += std::to_string(max_fps) + "_";
-  output += std::to_string(compressed) + "_";
-  output += std::to_string(start_frame) + "_";
-  output += std::to_string(end_frame) + "_";
-  output += backchannel_endpoint + "_";
-  output += stream_endpoint + "_";
+  output += filename + "$";
+  output += std::to_string(loop) + "$";
+  output += std::to_string(number_rgbd_sensors) + "$";
+  output += std::to_string(max_fps) + "$";
+  output += std::to_string(compressed) + "$";
+  output += std::to_string(start_frame) + "$";
+  output += std::to_string(end_frame) + "$";
+  output += backchannel_endpoint + "$";
+  output += stream_endpoint + "$";
 
   return output;
 }
 
 Play Play::from_string(std::string const& play_string){
-  auto parts = split(play_string, '_');
+  auto parts = split(play_string, '$');
   auto cmd = Play(
     parts[0],
     to_bool(parts[1]),

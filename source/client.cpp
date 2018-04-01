@@ -56,61 +56,77 @@ int main(int argc, char const *argv[]) {
   auto context = std::make_shared<zmq::context_t>(4);
 
   /* live rgbd stream */
-  auto record_1 = Record(
-    "pupil1.stream", //path were the *.stream file is saved
-    "127.0.0.1:9000", //endpoint of the rgbd stream that shall be recorded
-    4, //number of rgbd sensors
-    30, //duration of the recording
-    true //rgbd *.stream file is compressed
-  );
+  // auto record_1 = Record(
+  //   "pupil1.stream", //path were the *.stream file is saved
+  //   "127.0.0.1:9000", //endpoint of the rgbd stream that shall be recorded
+  //   4, //number of rgbd sensors
+  //   30, //duration of the recording
+  //   true //rgbd *.stream file is compressed
+  // );
 
   auto play_1 = Play(
-    "steppo.stream", //path to *.stream file that shall be played
+    "/tmp/pupil2.stream", //path to *.stream file that shall be played
     true, //loop the stream
     4, //number of rgbd sensors
     24, //maximal frames per second
     true, //rgbd *.stream file is compressed
     10, //frame number to start from
     100, //frame number to end on
-    "127.0.0.1:2100" //endpoint the rgbd file is streamed to (sync with ks file for demo)
+    "127.0.0.1:7000" //endpoint the rgbd file is streamed to (sync with ks file for demo)
   );
 
-  auto record_2 = Record(
-    "pupil2.stream", //path were the *.stream file is saved
-    play_1.stream_endpoint, //endpoint of the rgbd stream that shall be recorded
-    4, //number of rgbd sensors
-    30, //duration of the recording
-    true //rgbd *.stream file is compressed
-  );
-
-  auto play_2 = Play(
-    "andre.stream", //path to *.stream file that shall be played
+  auto play_3 = Play(
+    "/opt/kinect-resources/rgbd-framework/rgbd-daemon/kinect_recordings/user_andre.stream", //path to *.stream file that shall be played
     true, //loop the stream
     4, //number of rgbd sensors
     24, //maximal frames per second
     true, //rgbd *.stream file is compressed
     10, //frame number to start from
-    100 //frame number to end on
+    100, //frame number to end on
+    "127.0.0.1:7002" //endpoint the rgbd file is streamed to (sync with ks file for demo)
   );
+
+  auto record_2 = Record(
+    "/tmp/pupil2.stream", //path were the *.stream file is saved
+    play_1.stream_endpoint, //endpoint of the rgbd stream that shall be recorded
+    4, //number of rgbd sensors
+    30, //duration of the recording
+    true //rgbd *.stream file is compressed
+  );
+  //
+  // auto play_2 = Play(
+  //   "andre.stream", //path to *.stream file that shall be played
+  //   true, //loop the stream
+  //   4, //number of rgbd sensors
+  //   24, //maximal frames per second
+  //   true, //rgbd *.stream file is compressed
+  //   10, //frame number to start from
+  //   100 //frame number to end on
+  // );
 
 
   char id[2] = "0";
   auto client = RGBDRIClient(context,id);
   client.execute(play_1);
-  client.execute(record_1);
-  client.execute(record_2);
-  client.execute(play_2);
-
-  sleep(3);
-
-  play_1.pause();
-
-  sleep(3);
-
-  play_1.resume();
-
-  sleep(3);
+  //sleep(1);
+  //client.execute(record_2);
+  sleep(5);
+  //record_2.stop();
   play_1.stop();
+  // client.execute(record_1);
+  // client.execute(record_2);
+  // client.execute(play_2);
+  //
+  // sleep(3);
+  //
+  // play_1.pause();
+  //
+  // sleep(3);
+  //
+  // play_1.resume();
+  //
+  // sleep(3);
+  // play_1.stop();
 
   /* Async clients test */
   // std::vector<std::thread> clients;

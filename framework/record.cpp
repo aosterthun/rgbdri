@@ -49,19 +49,70 @@ void Record::start(){
   auto rep_thread = std::thread(&Record::init_rep,this);
   rep_thread.detach();
 
-  auto _ctx = zmq::context_t(1);
-  auto _skt = zmq::socket_t(_ctx, ZMQ_SUB);
-  _skt.setsockopt(ZMQ_SUBSCRIBE, "", 0);
-  m_logger->debug(stream_endpoint);
-  _skt.connect("tcp://"+stream_endpoint);
-  m_logger->debug(stream_endpoint);
+  FileBuffer* fb = nullptr;
+  ChronoMeter cm;
+  size_t framecounter = 0;
+  const unsigned colorsize = compressed ? 691200 : 1280 * 1080 * 3;
+  const unsigned depthsize = 512 * 424 * sizeof(float);
+  const unsigned framesize = (colorsize + depthsize) * number_rgbd_sensors;
+
+  if(fb != nullptr){
+    fb->close();
+    delete fb;
+    fb = nullptr;
+    std::cout << "closed" << std::endl;
+  }
+
+  fb = new FileBuffer(filename.c_str());
+  if(!fb->open("w", 0)){
+    std::cerr << "error opening " << filename << " exiting..." << std::endl;
+    exit(0);
+  }
+  std::cout << "opened" << std::endl;
+  framecounter = 0;
+
+  zmq::socket_t  socket(*ctx.get(), ZMQ_SUB); // means a subscriber
+  socket.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+  uint32_t hwm = 1;
+  socket.setsockopt(ZMQ_RCVHWM,&hwm, sizeof(hwm));
+  std::string endpoint("tcp://" + stream_endpoint);
+  socket.connect(endpoint.c_str());
 
   while(is_running) {
-    auto data = srecv(_skt);
-    for (auto i : data)
-      m_logger->info(i);
+    zmq::message_t zmqm(framesize);
+    socket.recv(&zmqm); // blocking
+    const double currtime = cm.getTick();
+    memcpy((char*) zmqm.data(), (const char*) &currtime, sizeof(double));
+    if(fb == nullptr){
+      m_logger->critical("ERROR: not recording, file not open!");
+    }
+    else{
+      //std::cout << "recording frame " << ++framecounter << " at time " << currtime << std::endl;
+      fb->write((unsigned char*) zmqm.data(), framesize);
+      if(framecounter > MAX_FRAMES_TO_RECORD){
+        if(fb != nullptr){
+          fb->close();
+          delete fb;
+          fb = nullptr;
+          std::cout << "closed" << std::endl;
+        }
+        m_logger->critical("ALTERT: closed recording since too much frames were already recorded!: {0:d} ",framecounter);
+      }
+    }
   }
   m_logger->debug("[END] void Record::execute()");
+};
+
+void Record::stop(){
+  init_req();
+  m_logger->debug("[START] void Record::stop()");
+  skt->connect("tcp://" + backchannel_endpoint);
+
+  ssend(*skt.get(),"STOP");
+  srecv(*skt.get());
+
+  skt->disconnect("tcp://" + backchannel_endpoint);
+  m_logger->debug("[END] void Record::stop()");
 };
 
 std::string Record::to_string(){

@@ -4,6 +4,8 @@
 #include "../external/spdlog/include/spdlog/spdlog.h"
 #include "zmq.hpp"
 #include <memory>
+#include <FileBuffer.hpp>
+#include <ChronoMeter.hpp>
 #include <stdio.h>
 #include <string>
 #include <vector>
