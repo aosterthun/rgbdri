@@ -1,21 +1,24 @@
 #include "RGBDRIClient.hpp"
 
-RGBDRIClient::RGBDRIClient(std::shared_ptr<zmq::context_t> _ctx, char* id)
-:m_ctx{_ctx},
+/*
+  TODO:
+    - Check if id is nessecary anymore. If so, make it static in client
+
+*/
+RGBDRIClient::RGBDRIClient(std::string const& server_endpoint)
+:m_ctx{std::make_shared<zmq::context_t(4)>},
 m_skt{},
 m_logger{spdlog::get("console")}{
 
   m_logger->info("Init RGBDRIClient");
-
+  char* id = '1';
   std::string sid{id};
-  std::string cid = "["+sid+"]#127.0.0.1";
-
-
+  std::string cid = "["+sid+"]#"+server_endpoint;
   try
   {
     m_skt = std::make_shared<zmq::socket_t>(*m_ctx.get(), ZMQ_DEALER);
     m_skt->setsockopt(ZMQ_IDENTITY, cid.c_str(), strlen(cid.c_str()));
-    m_skt->connect("tcp://127.0.0.1:8000");
+    m_skt->connect("tcp://"+server_endpoint+":8000");
   }catch (zmq::error_t error)
   {
      //TODO: handle this error

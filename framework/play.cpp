@@ -1,5 +1,31 @@
 #include "play.hpp"
 
+Play::Play(RGBDRIClient const& rgbdri_client, std::string const& filename, std::string const& stream_endpoint):
+rgbdri_client{rgbdri_client},
+filename{filename},
+loop{true},
+number_rgbd_sensors{4},
+compressed{true},
+stream_endpoint{stream_endpoint},
+ctx{},
+skt{},
+req_inited{false},
+m_logger{spdlog::get("console")},
+is_running{false},
+backchannel_endpoint{}
+{
+  ctx = std::make_shared<zmq::context_t>(4);
+  m_logger->debug(stream_endpoint);
+  if(stream_endpoint != "self"){
+    auto endpoint = split(stream_endpoint,':');
+    m_logger->debug(endpoint[1]);
+    auto port = std::stoi(endpoint[1]);
+    auto new_port = port + 1;
+    backchannel_endpoint = endpoint[0] + ":" + std::to_string(new_port);
+    m_logger->debug(backchannel_endpoint);
+  }
+}
+
 Play::Play(std::string const& filename,
             bool loop,
             int number_rgbd_sensors,
@@ -169,6 +195,10 @@ void Play::execute(){
 
   m_logger->debug("[END] void Play::execute()");
 };
+
+void Play::start(){
+  rgbdri_client.execute(this);
+}
 
 
 void Play::stop(){

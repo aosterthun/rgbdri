@@ -12,6 +12,16 @@
 #include "helpers.hpp"
 #include <iostream>
 
+/*
+  TODO:
+    - Play holds an instance of RGBDRIClient to execute itself
+      - Play.start(){
+          rgbdri_clinet.execute(this);
+        }
+    - Rework constructor (Record)
+    - is_prepared flag to check on play
+*/
+
 class Play{
 public:
   std::string filename;
@@ -24,12 +34,14 @@ public:
   std::string stream_endpoint;
   std::string backchannel_endpoint;
 
+  Play(RGBDRIClient const& rgbdri_client, std::string const& filename, std::string const& stream_endpoint);
   Play(std::string const& filename,bool loop,int number_rgbd_sensors,int max_fps,bool compressed,int start_frame,int end_frame,std::string const& stream_endpoint = "self");
   Play(std::string const& filename,bool loop,int number_rgbd_sensors,int max_fps,bool compressed,int start_frame,int end_frame,std::string const& backchannel_endpoint,std::string const& stream_endpoint);
-  void execute(); // TODO: Rename to start()
+  void execute(); //server side execute
   void stop();
   void pause();
   void resume();
+  void start(); //client side request server.execute
   std::string to_string();
   static Play from_string(std::string const& play_string);
 
