@@ -98,6 +98,27 @@ inline std::vector<std::string> srecv(zmq::socket_t &skt){
   return shist;
 };
 
+inline std::vector<std::string> srecv(zmq::socket_t &skt, bool blocking){
+  int more = 1;
+  size_t more_size = sizeof(more);
+  std::vector<std::string> shist;
+
+  while(more != 0){
+    zmq::message_t msg;
+    if(blocking){
+        skt.recv(&msg);
+    }else{
+      skt.recv(&msg, ZMQ_NOBLOCK);
+    }
+
+    skt.getsockopt(ZMQ_RCVMORE, &more, &more_size);
+    auto i = std::string(static_cast<char*>(msg.data()),msg.size());
+    shist.push_back(i);
+  }
+
+  return shist;
+};
+
 inline std::vector<zmq::message_t> recv(zmq::socket_t &skt){
   int more = 1;
   size_t more_size = sizeof(more);

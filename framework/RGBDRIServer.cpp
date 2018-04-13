@@ -13,7 +13,6 @@ m_logger{spdlog::get("console")}{
 
     while (true) {
       auto request = srecv(router);
-      m_logger->debug(request.front());
       auto client_ip = split(request.front(),'#')[1];
 
       //Do some work (The server is not parallel so the work should be fast to compute)
@@ -24,12 +23,14 @@ m_logger{spdlog::get("console")}{
       switch (msg.type) {
         case 0:{
           auto cmd = Play::from_string(msg.payload);
-          if(cmd.stream_endpoint == "self"){
-              auto next_port = ZMQPortManager::get_instance().get_next_free_port();
-              cmd.stream_endpoint = client_ip+":"+std::to_string(next_port);
-              cmd.backchannel_endpoint = client_ip+":"+std::to_string(next_port+1);
-          }
-
+          // if(cmd.stream_endpoint == "self"){
+          //
+          //     cmd.stream_endpoint = client_ip+":"+std::to_string(next_port);
+          // }
+          auto next_port = ZMQPortManager::get_instance().get_next_free_port();
+          cmd.backchannel_endpoint = client_ip+":"+std::to_string(next_port+1);
+          cmd.is_running = true;
+          cmd.is_paused = false;
           reply_msg.payload = cmd.to_string();
           auto cmd_thread = std::thread(&Play::execute, cmd);
           cmd_thread.detach();
@@ -39,9 +40,10 @@ m_logger{spdlog::get("console")}{
           auto cmd = Record::from_string(msg.payload);
           auto next_port = ZMQPortManager::get_instance().get_next_free_port();
           cmd.backchannel_endpoint = client_ip+":"+std::to_string(next_port+1);
-          m_logger->debug(cmd.backchannel_endpoint);
+          cmd.is_running = true;
+          cmd.is_paused = false;
           reply_msg.payload = cmd.to_string();
-          auto cmd_thread = std::thread(&Record::start, cmd);
+          auto cmd_thread = std::thread(&Record::execute, cmd);
           cmd_thread.detach();
           break;
         }

@@ -1,7 +1,7 @@
 #ifndef play_hpp
 #define play_hpp
 
-#include "../external/spdlog/include/spdlog/spdlog.h"
+#include "../spdlog/include/spdlog/spdlog.h"
 #include "zmq.hpp"
 #include <memory>
 #include <FileBuffer.hpp>
@@ -11,6 +11,7 @@
 #include <vector>
 #include "helpers.hpp"
 #include <iostream>
+#include "RGBDRIClient.hpp"
 
 /*
   TODO:
@@ -34,25 +35,32 @@ public:
   std::string stream_endpoint;
   std::string backchannel_endpoint;
 
-  Play(RGBDRIClient const& rgbdri_client, std::string const& filename, std::string const& stream_endpoint);
+  Play(RGBDRIClient &client, std::string const& filename, std::string const& stream_endpoint);
+  Play(std::string const& filename, std::string const& stream_endpoint);
   Play(std::string const& filename,bool loop,int number_rgbd_sensors,int max_fps,bool compressed,int start_frame,int end_frame,std::string const& stream_endpoint = "self");
   Play(std::string const& filename,bool loop,int number_rgbd_sensors,int max_fps,bool compressed,int start_frame,int end_frame,std::string const& backchannel_endpoint,std::string const& stream_endpoint);
+  ~Play();
   void execute(); //server side execute
   void stop();
   void pause();
+  void play_as_loop();
   void resume();
   void start(); //client side request server.execute
   std::string to_string();
   static Play from_string(std::string const& play_string);
+  static void from_string(Play &play,std::string const& play_string);
+
+  bool is_running;
+  bool is_paused;
 
 private:
   std::shared_ptr<zmq::context_t> ctx;
   std::shared_ptr<zmq::socket_t> skt;
   bool req_inited;
-  bool is_running;
-  bool is_paused;
-  std::shared_ptr<spdlog::logger> m_logger;
 
+  std::shared_ptr<spdlog::logger> m_logger;
+  RGBDRIClient client;
+  bool rep_thread_running;
 
   void init_req();
   void init_rep();

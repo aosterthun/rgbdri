@@ -1,7 +1,7 @@
 #ifndef GenericMessage_hpp
 #define GenericMessage_hpp
 
-#include "../external/spdlog/include/spdlog/spdlog.h"
+#include "../spdlog/include/spdlog/spdlog.h"
 #include "zmq.hpp"
 #include <memory>
 #include <stdio.h>
