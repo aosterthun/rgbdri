@@ -122,13 +122,16 @@ void Play::init_req(){
 }
 
 void Play::init_rep(){
+  try{
   rep_thread_running = true;
   skt = std::make_shared<zmq::socket_t>(*ctx.get(), ZMQ_REP);
-  skt->bind("tcp://" + backchannel_endpoint);
 
-  while(is_running){
+    skt->bind("tcp://" + backchannel_endpoint);
+
+  while(true){
     zmq::message_t message;
     auto request = srecv(*skt.get(),false);
+
     if(request[0] == "STOP"){
       ssend(*skt.get(), "STOPED");
       is_running = false;
@@ -141,19 +144,34 @@ void Play::init_rep(){
       ssend(*skt.get(), "RESUMED");
       is_paused = false;
     }
-
+    if(request[0] == "IS_RUNNING"){
+      m_logger->debug("is running");
+      ssend(*skt.get(), std::to_string(is_running));
+    }
 
   }
+
   skt->unbind("tcp://" + backchannel_endpoint);
   rep_thread_running = false;
+} catch(zmq::error_t error) {
+  m_logger->critical("hallo");
+  m_logger->critical(error.what());
+  return;
+}
 }
 
 void Play::execute(){
+  try{
   m_logger->debug("==============[START]==============");
   m_logger->debug("void Play::execute()");
   m_logger->debug("Stream endpoint: {0:s}", stream_endpoint);
   m_logger->debug("Backchannel endpoint: {0:s}", backchannel_endpoint);
   m_logger->debug("===================================");
+
+  if(is_running == true){
+
+  }
+
   is_running = true;
   auto rep_thread = std::thread(&Play::init_rep,this);
   rep_thread.detach();
@@ -167,11 +185,12 @@ void Play::execute(){
   size_t framecounter = 0;
   size_t num_frames = 0;
 
-  zmq::socket_t  socket(*ctx.get(), ZMQ_PUB);
-  uint32_t hwm = 1;
-  socket.setsockopt(ZMQ_SNDHWM,&hwm, sizeof(hwm));
-  std::string endpoint("tcp://" + stream_endpoint);
-  socket.bind(endpoint.c_str());
+    zmq::socket_t  socket(*ctx.get(), ZMQ_PUB);
+    uint32_t hwm = 1;
+    socket.setsockopt(ZMQ_SNDHWM,&hwm, sizeof(hwm));
+    std::string endpoint("tcp://" + stream_endpoint);
+    socket.bind(endpoint.c_str());
+
 
   if(fb != nullptr){
     fb->close();
@@ -202,8 +221,12 @@ void Play::execute(){
       if(framecounter > 1){
           std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time));
       }
+      try{
+        socket.send(zmqm);
+      } catch(zmq::error_t e){
+        m_logger->critical(e.what());
+      }
 
-      socket.send(zmqm);
       ++framecounter;
       if(framecounter >= num_frames){
         if(loop){
@@ -225,42 +248,67 @@ void Play::execute(){
   m_logger->debug("Stream endpoint: {0:s}", stream_endpoint);
   m_logger->debug("Backchannel endpoint: {0:s}", backchannel_endpoint);
   m_logger->debug("===================================");
+} catch(...) {
+  try{
+
+    return;
+  } catch(zmq::error_t e){
+    m_logger->critical(e.what());
+  }
+}
 };
 
 void Play::start(){
-  //Wrap command as GenericMessage
-  auto msg = GenericMessage();
-  msg.type = 0; //TODO: think about type handling
-  msg.payload = to_string();
-  //Send command to server
-  client.send(msg.to_string());
+  try{
+    //Wrap command as GenericMessage
+    auto msg = GenericMessage();
+    msg.type = 0; //TODO: think about type handling
+    msg.payload = to_string();
+    //Send command to server
+    client.send(msg.to_string());
 
 
-  auto reply = client.recv();
+    auto reply = client.recv();
 
-  auto reply_msg = GenericMessage::from_string(reply.back());
-  switch (reply_msg.type) {
-    case 15:{
+    auto reply_msg = GenericMessage::from_string(reply.back());
+    switch (reply_msg.type) {
+      case 15:{
 
-      Play::from_string(*this, reply_msg.payload);
+        Play::from_string(*this, reply_msg.payload);
 
-      // stream_endpoint = cmd.stream_endpoint;
-      // backchannel_endpoint = cmd.backchannel_endpoint;
-      // is_running = cmd.is_running;
-      // is_paused = cmd.is_paused;
-      // m_logger->debug("Play on endpoint: {0:s}", cmd.stream_endpoint);
-      break;
+        // stream_endpoint = cmd.stream_endpoint;
+        // backchannel_endpoint = cmd.backchannel_endpoint;
+        // is_running = cmd.is_running;
+        // is_paused = cmd.is_paused;
+        // m_logger->debug("Play on endpoint: {0:s}", cmd.stream_endpoint);
+        break;
+      }
+      case 1:{
+        m_logger->warn("Received non valid command");
+        break;
+      }
     }
-    case 1:{
-      m_logger->warn("Received non valid command");
-      break;
-    }
+  } catch (zmq::error_t error){
+    m_logger->critical(error.what());
   }
+};
+
+bool Play::is_playing(){
+  init_req();
+  skt->connect("tcp://" + backchannel_endpoint);
+
+  ssend(*skt.get(),"IS_RUNNING");
+  auto rep = srecv(*skt.get());
+
+  skt->disconnect("tcp://" + backchannel_endpoint);
+
+  return to_bool(rep.front());
 };
 
 void Play::play_as_loop(){
   loop = true;
   start();
+  loop = false;
 }
 
 void Play::stop(){

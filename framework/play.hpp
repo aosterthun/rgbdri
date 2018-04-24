@@ -40,6 +40,7 @@ public:
   Play(std::string const& filename,bool loop,int number_rgbd_sensors,int max_fps,bool compressed,int start_frame,int end_frame,std::string const& stream_endpoint = "self");
   Play(std::string const& filename,bool loop,int number_rgbd_sensors,int max_fps,bool compressed,int start_frame,int end_frame,std::string const& backchannel_endpoint,std::string const& stream_endpoint);
   ~Play();
+  bool is_playing();
   void execute(); //server side execute
   void stop();
   void pause();

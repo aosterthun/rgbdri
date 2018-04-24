@@ -32,8 +32,13 @@ m_logger{spdlog::get("console")}{
           cmd.is_running = true;
           cmd.is_paused = false;
           reply_msg.payload = cmd.to_string();
-          auto cmd_thread = std::thread(&Play::execute, cmd);
-          cmd_thread.detach();
+          try{
+            auto cmd_thread = std::thread(&Play::execute, cmd);
+            cmd_thread.detach();
+          } catch(zmq::error_t error) {
+            m_logger->critical(error.what());
+            return;
+          }
           break;
         }
         case 1:{
@@ -53,9 +58,8 @@ m_logger{spdlog::get("console")}{
   }
   catch (zmq::error_t error)
   {
-  std::string errorStr = error.what();
+    m_logger->critical(error.what());
   }
-
 }
 
 void RGBDRIServer::worker(){
