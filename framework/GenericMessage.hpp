@@ -11,6 +11,7 @@
 
 struct GenericMessage{
   int type;
+  std::string meta_data;
   std::string payload;
   std::string to_string();
   static GenericMessage from_string(std::string const& generic_message_string);

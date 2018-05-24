@@ -1,5 +1,6 @@
 #ifndef helpers_hpp
 #define helpers_hpp
+
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -21,11 +22,11 @@ inline std::vector<std::string> split(const std::string &s, char delim) {
     return elems;
 }
 
-static char* int_to_char(int i){
-  static char j[10];
-  sprintf(j, "%d", i);
-  return j;
-};
+// static char* int_to_char(int i){
+//   static char j[10];
+//   sprintf(j, "%d", i);
+//   return j;
+// };
 
 inline bool to_bool(std::string const& s) {
      return s != "0";
@@ -102,18 +103,21 @@ inline std::vector<std::string> srecv(zmq::socket_t &skt, bool blocking){
   int more = 1;
   size_t more_size = sizeof(more);
   std::vector<std::string> shist;
+  try{
+    while(more != 0){
+      zmq::message_t msg;
+      if(blocking){
+          skt.recv(&msg);
+      }else{
+        skt.recv(&msg, ZMQ_NOBLOCK);
+      }
 
-  while(more != 0){
-    zmq::message_t msg;
-    if(blocking){
-        skt.recv(&msg);
-    }else{
-      skt.recv(&msg, ZMQ_NOBLOCK);
+      skt.getsockopt(ZMQ_RCVMORE, &more, &more_size);
+      auto i = std::string(static_cast<char*>(msg.data()),msg.size());
+      shist.push_back(i);
     }
-
-    skt.getsockopt(ZMQ_RCVMORE, &more, &more_size);
-    auto i = std::string(static_cast<char*>(msg.data()),msg.size());
-    shist.push_back(i);
+  } catch (zmq::error_t e){
+    std::cerr << e.what() << '\n';
   }
 
   return shist;

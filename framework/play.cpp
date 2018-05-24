@@ -1,395 +1,224 @@
 #include "play.hpp"
 
-Play::Play(RGBDRIClient &client, std::string const& filename, std::string const& stream_endpoint):
-client{client},
-filename{filename},
-loop{false},
-number_rgbd_sensors{4},
-compressed{true},
-stream_endpoint{stream_endpoint},
-ctx{},
-skt{},
-req_inited{false},
-m_logger{spdlog::get("console")},
-is_running{false},
-backchannel_endpoint{}
+Play::Play(std::string const& filename, std::string const& stream_endpoint, std::string const& backchannel_endpoint):
+m_console_logger{spdlog::get("console")},
+m_filename{filename},m_stream_endpoint{stream_endpoint},m_status{"UNDEFINED"},m_last_status{"UNDEFINED"},
+m_context{std::make_shared<zmq::context_t>(4)},m_req_socket{std::make_shared<zmq::socket_t>(*m_context.get(),ZMQ_REQ)},m_backchannel_endpoint{backchannel_endpoint}
 {
-  ctx = std::make_shared<zmq::context_t>(4);
-  if(stream_endpoint != "self"){
-    auto endpoint = split(stream_endpoint,':');
-    auto port = std::stoi(endpoint[1]);
-    auto new_port = port + 1;
-    backchannel_endpoint = endpoint[0] + ":" + std::to_string(new_port);
-  }
+  m_stream_thread = std::make_shared<std::thread>(&Play::stream_thread, this);
+  m_stream_thread->detach();
 };
 
-Play::Play(std::string const& filename, std::string const& stream_endpoint):
-client{},
-filename{filename},
-loop{false},
-number_rgbd_sensors{4},
-compressed{true},
-stream_endpoint{stream_endpoint},
-ctx{},
-skt{},
-req_inited{false},
-m_logger{spdlog::get("console")},
-is_running{false},
-backchannel_endpoint{}
+Play::Play(RGBDRI& rgbdri, std::string const& filename, std::string const& stream_endpoint):
+m_console_logger{spdlog::get("console")},
+m_filename{filename},m_stream_endpoint{stream_endpoint},m_status{"UNDEFINED"},m_last_status{"UNDEFINED"},
+m_context{std::make_shared<zmq::context_t>(4)},m_req_socket{std::make_shared<zmq::socket_t>(*m_context.get(),ZMQ_REQ)},m_backchannel_endpoint{"UNDEFINED"}
 {
-  ctx = std::make_shared<zmq::context_t>(4);
-  if(stream_endpoint != "self"){
-    auto endpoint = split(stream_endpoint,':');
-    auto port = std::stoi(endpoint[1]);
-    auto new_port = port + 1;
-    backchannel_endpoint = endpoint[0] + ":" + std::to_string(new_port);
+  auto msg = GenericMessage();
+  msg.type = 0;
+  msg.meta_data = rgbdri.server_endpoint();
+  msg.payload = to_string();
+
+  rgbdri.send(msg.to_string());
+
+  auto reply = rgbdri.recv();
+
+  auto reply_msg = GenericMessage::from_string(reply.back());
+  switch (reply_msg.type) {
+    case 15:{
+      Play::from_string(*this, reply_msg.payload);
+      break;
+    }
+    case 1:{
+
+      break;
+    }
   }
+  m_req_socket->connect("tcp://" + m_backchannel_endpoint);
 };
 
-Play::Play(std::string const& filename,
-            bool loop,
-            int number_rgbd_sensors,
-            int max_fps,
-            bool compressed,
-            int start_frame,
-            int end_frame,
-            std::string const& stream_endpoint):
-            client{},
-            filename{filename},
-            loop{loop},
-            number_rgbd_sensors{number_rgbd_sensors},
-            max_fps{max_fps},
-            compressed{compressed},
-            start_frame{start_frame},
-            end_frame{end_frame},
-            stream_endpoint{stream_endpoint},
-            ctx{},
-            skt{},
-            req_inited{false},
-            m_logger{spdlog::get("console")},
-            is_running{false},
-            backchannel_endpoint{}{
-              ctx = std::make_shared<zmq::context_t>(4);
-              if(stream_endpoint != "self"){
-                auto endpoint = split(stream_endpoint,':');
-                auto port = std::stoi(endpoint[1]);
-                auto new_port = port + 1;
-                backchannel_endpoint = endpoint[0] + ":" + std::to_string(new_port);
-              }
-
+std::string Play::status(){
+  ssend(*m_req_socket.get(), "STATUS");
+  m_status = srecv(*m_req_socket.get()).front();
+  return m_status;
 };
-
-Play::Play(std::string const& filename,
-            bool loop,
-            int number_rgbd_sensors,
-            int max_fps,
-            bool compressed,
-            int start_frame,
-            int end_frame,
-            std::string const& backchannel_endpoint,
-            std::string const& stream_endpoint):
-            client{},
-            filename{filename},
-            loop{loop},
-            number_rgbd_sensors{number_rgbd_sensors},
-            max_fps{max_fps},
-            compressed{compressed},
-            start_frame{start_frame},
-            end_frame{end_frame},
-            stream_endpoint{stream_endpoint},
-            ctx{},
-            skt{},
-            req_inited{false},
-            m_logger{spdlog::get("console")},
-            is_running{false},
-            backchannel_endpoint{backchannel_endpoint}{
-              ctx = std::make_shared<zmq::context_t>(4);
+void Play::start(){
+  ssend(*m_req_socket.get(), "START");
+  m_status = srecv(*m_req_socket.get()).front();
 };
-
-Play::~Play(){
-  // m_logger->debug("destructor {0:s}", filename);
-  // m_logger->debug("destructor {0:b}", is_running);
-  // if(is_running){
-  //   stop();
-  // }
+void Play::pause(){
+  ssend(*m_req_socket.get(), "PAUSE");
+  m_status = srecv(*m_req_socket.get()).front();
+};
+void Play::resume(){
+  ssend(*m_req_socket.get(), "RESUME");
+  m_status = srecv(*m_req_socket.get()).front();
+};
+void Play::loop(){
+  ssend(*m_req_socket.get(), "LOOP");
+  m_status = srecv(*m_req_socket.get()).front();
+};
+void Play::stop(){
+  ssend(*m_req_socket.get(), "STOP");
+  m_status = srecv(*m_req_socket.get()).front();
+};
+void Play::terminate(){
+  ssend(*m_req_socket.get(), "TERMINATE");
+  m_status = srecv(*m_req_socket.get()).front();
+};
+void Play::reset(){
+  ssend(*m_req_socket.get(), "RESET");
+  m_status = srecv(*m_req_socket.get()).front();
 }
+void Play::enable_remote_control(){
+  m_remote_control_thread = std::make_shared<std::thread>(&Play::remote_control_thread, this);
+  m_remote_control_thread->detach();
+};
+void Play::remote_control_thread(){
+  auto context = zmq::context_t(4);
+  auto rep_socket = zmq::socket_t(context,ZMQ_REP);
+  rep_socket.bind("tcp://" + m_backchannel_endpoint);
 
-void Play::init_req(){
-  if(!req_inited){
-    skt = std::make_shared<zmq::socket_t>(*ctx.get(), ZMQ_REQ);
-    req_inited = true;
+  while (m_status != "TERMINATE") {
+    std::string request = srecv(rep_socket).front();
+    if(request == "RESET"){
+      m_status = "UNDEFINED";
+    }
+    if(request == "START"){
+      if(m_status == "STOPED"){
+        m_status = "PLAYING";
+        m_last_status = m_status;
+      }
+      if(m_status == "PAUSED"){
+        m_status = m_last_status;
+      }
+      if(m_status == "UNDEFINED"){
+        m_status = "INIT_STREAM";
+        m_last_status = "PLAYING";
+      }
+    }
+    if(request == "PAUSE"){
+      if(m_status == "PLAYING" || m_status == "LOOPING"){
+        m_status = "PAUSED";
+      }
+    }
+    if(request == "RESUME"){
+      if(m_status == "PAUSED"){
+        m_status = m_last_status;
+      }
+    }
+    if(request == "LOOP"){
+      if(m_status == "UNDEFINED"){
+        m_status = "INIT_STREAM";
+        m_last_status = "LOOPING";
+      }
+      if(m_status == "PAUSED"){
+        m_status = m_last_status;
+      }
+      if(m_status == "STOPED"){
+        m_status = "LOOPING";
+        m_last_status = m_status;
+      }
+    }
+    if(request == "STOP"){
+      if(m_status != "STOPED"){
+        m_status = "STOPED";
+      }
+    }
+    if(request == "TERMINATE"){
+      m_status = "TERMINATE";
+    }
+    if(request == "STATUS"){
+      ssend(rep_socket, m_status);
+    }else{
+      ssend(rep_socket, m_status);
+    }
   }
-}
+};
+void Play::stream_thread(){
+  //networking
+  auto context = zmq::context_t(4);
+  auto socket = zmq::socket_t(context, ZMQ_PUB);
+  uint32_t hwm = 1;
+  socket.setsockopt(ZMQ_SNDHWM,&hwm, sizeof(hwm));
+  socket.bind("tcp://" + m_stream_endpoint);
 
-void Play::init_rep(){
-  try{
-  rep_thread_running = true;
-  skt = std::make_shared<zmq::socket_t>(*ctx.get(), ZMQ_REP);
-
-    skt->bind("tcp://" + backchannel_endpoint);
-
-  while(true){
-    zmq::message_t message;
-    auto request = srecv(*skt.get(),false);
-
-    if(request[0] == "STOP"){
-      ssend(*skt.get(), "STOPED");
-      is_running = false;
-    }
-    if(request[0] == "PAUSE"){
-      ssend(*skt.get(), "PAUSED");
-      is_paused = true;
-    }
-    if(request[0] == "RESUME"){
-      ssend(*skt.get(), "RESUMED");
-      is_paused = false;
-    }
-    if(request[0] == "IS_RUNNING"){
-      m_logger->debug("is running");
-      ssend(*skt.get(), std::to_string(is_running));
-    }
-
-  }
-
-  skt->unbind("tcp://" + backchannel_endpoint);
-  rep_thread_running = false;
-} catch(zmq::error_t error) {
-  m_logger->critical("hallo");
-  m_logger->critical(error.what());
-  return;
-}
-}
-
-void Play::execute(){
-  try{
-  m_logger->debug("==============[START]==============");
-  m_logger->debug("void Play::execute()");
-  m_logger->debug("Stream endpoint: {0:s}", stream_endpoint);
-  m_logger->debug("Backchannel endpoint: {0:s}", backchannel_endpoint);
-  m_logger->debug("===================================");
-
-  if(is_running == true){
-
-  }
-
-  is_running = true;
-  auto rep_thread = std::thread(&Play::init_rep,this);
-  rep_thread.detach();
-
-  const unsigned colorsize = compressed ? 691200 : 1280 * 1080 * 3;
+  const unsigned colorsize = true ? 691200 : 1280 * 1080 * 3;
   const unsigned depthsize = 512 * 424 * sizeof(float);
-  const unsigned framesize = (colorsize + depthsize) * number_rgbd_sensors;
+  const unsigned framesize = (colorsize + depthsize) * 4;
   double frametime = 0;
   double last_frame_time = 0;
   FileBuffer* fb = nullptr;
   size_t framecounter = 0;
   size_t num_frames = 0;
-
-    zmq::socket_t  socket(*ctx.get(), ZMQ_PUB);
-    uint32_t hwm = 1;
-    socket.setsockopt(ZMQ_SNDHWM,&hwm, sizeof(hwm));
-    std::string endpoint("tcp://" + stream_endpoint);
-    socket.bind(endpoint.c_str());
-
-
-  if(fb != nullptr){
-    fb->close();
-    delete fb;
-    fb = nullptr;
-  }
-
-  fb = new FileBuffer(filename.c_str());
-  if(!fb->open("r", 0)){
-    m_logger->critical("error opening {0:s} exiting...",filename);
-    exit(0);
-  }
-  fb->setLooping(loop);
-
-  framecounter = 0;
-
-  num_frames = fb->getFileSizeBytes()/framesize;
-
-  while (is_running) {
-    if(!is_paused){
-      zmq::message_t zmqm(framesize);
-      fb->read((unsigned char*) zmqm.data(), framesize);
-      memcpy((char*) &frametime, (const char*) zmqm.data(), sizeof(double));
-
-      const double elapsed_frame_time = frametime - last_frame_time;
-      last_frame_time = frametime;
-      const unsigned sleep_time = std::min(100u, std::max(0u, (unsigned)((elapsed_frame_time) * 1000u)));
-      if(framecounter > 1){
-          std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time));
+  //stream loop
+  while(m_status != "TERMINATE"){
+    if(m_status == "INIT_STREAM"){
+      fb = new FileBuffer(m_filename.c_str());
+      if(!fb->open("r", 0)){
+        std::cout << "ERROR" << '\n';
+        exit(0);
       }
-      try{
+      fb->setLooping(true);
+
+      num_frames = fb->getFileSizeBytes()/framesize;
+
+      m_status = m_last_status;
+    }else if(m_status == "PLAYING" || m_status == "LOOPING" || m_status == "PAUSED"){
+      if(m_status != "PAUSED"){
+        zmq::message_t zmqm(framesize);
+        fb->read((unsigned char*) zmqm.data(), framesize);
+        memcpy((char*) &frametime, (const char*) zmqm.data(), sizeof(double));
+        const double elapsed_frame_time = frametime - last_frame_time;
+        last_frame_time = frametime;
+        const unsigned sleep_time = std::min(100u, std::max(0u, (unsigned)((elapsed_frame_time) * 1000u)));
+        if(framecounter > 1){
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time));
+        }
         socket.send(zmqm);
-      } catch(zmq::error_t e){
-        m_logger->critical(e.what());
-      }
+        ++framecounter;
 
-      ++framecounter;
-      if(framecounter >= num_frames){
-        if(loop){
+        if(framecounter >= num_frames){
           framecounter = 0;
+          if(m_status != "LOOPING"){
+            m_status = "STOPED";
+          }
         }
-        else{
-          is_running = false;
-        }
+      }
+    }else if(m_status == "STOPED"){
+      if(framecounter != 0){
+        fb->rewindFile();
+        framecounter = 0;
       }
     }
   }
-
-  while (rep_thread_running) {
-
-  }
-
-  m_logger->debug("==============[END]================");
-  m_logger->debug("void Play::execute()");
-  m_logger->debug("Stream endpoint: {0:s}", stream_endpoint);
-  m_logger->debug("Backchannel endpoint: {0:s}", backchannel_endpoint);
-  m_logger->debug("===================================");
-} catch(...) {
-  try{
-
-    return;
-  } catch(zmq::error_t e){
-    m_logger->critical(e.what());
-  }
-}
 };
-
-void Play::start(){
-  try{
-    //Wrap command as GenericMessage
-    auto msg = GenericMessage();
-    msg.type = 0; //TODO: think about type handling
-    msg.payload = to_string();
-    //Send command to server
-    client.send(msg.to_string());
-
-
-    auto reply = client.recv();
-
-    auto reply_msg = GenericMessage::from_string(reply.back());
-    switch (reply_msg.type) {
-      case 15:{
-
-        Play::from_string(*this, reply_msg.payload);
-
-        // stream_endpoint = cmd.stream_endpoint;
-        // backchannel_endpoint = cmd.backchannel_endpoint;
-        // is_running = cmd.is_running;
-        // is_paused = cmd.is_paused;
-        // m_logger->debug("Play on endpoint: {0:s}", cmd.stream_endpoint);
-        break;
-      }
-      case 1:{
-        m_logger->warn("Received non valid command");
-        break;
-      }
-    }
-  } catch (zmq::error_t error){
-    m_logger->critical(error.what());
-  }
-};
-
-bool Play::is_playing(){
-  init_req();
-  skt->connect("tcp://" + backchannel_endpoint);
-
-  ssend(*skt.get(),"IS_RUNNING");
-  auto rep = srecv(*skt.get());
-
-  skt->disconnect("tcp://" + backchannel_endpoint);
-
-  return to_bool(rep.front());
-};
-
-void Play::play_as_loop(){
-  loop = true;
-  start();
-  loop = false;
-}
-
-void Play::stop(){
-  init_req();
-  skt->connect("tcp://" + backchannel_endpoint);
-
-  ssend(*skt.get(),"STOP");
-  srecv(*skt.get());
-
-  skt->disconnect("tcp://" + backchannel_endpoint);
-};
-
-void Play::pause(){
-  init_req();
-
-  skt->connect("tcp://" + backchannel_endpoint);
-
-
-  ssend(*skt.get(),"PAUSE");
-  srecv(*skt.get());
-
-  skt->disconnect("tcp://" + backchannel_endpoint);
-};
-
-void Play::resume(){
-  init_req();
-  skt->connect("tcp://" + backchannel_endpoint);
-
-  ssend(*skt.get(),"RESUME");
-  srecv(*skt.get());
-
-  skt->disconnect("tcp://" + backchannel_endpoint);
-};
-
 std::string Play::to_string(){
   std::string output;
 
-  output += filename + "$";
-  output += std::to_string(loop) + "$";
-  output += std::to_string(number_rgbd_sensors) + "$";
-  output += std::to_string(max_fps) + "$";
-  output += std::to_string(compressed) + "$";
-  output += std::to_string(start_frame) + "$";
-  output += std::to_string(end_frame) + "$";
-  output += std::to_string(is_running) + "$";
-  output += std::to_string(is_paused) + "$";
-  output += backchannel_endpoint + "$";
-  output += stream_endpoint + "$";
+  output += m_filename + "$";
+  output += m_stream_endpoint + "$";
+  output += m_backchannel_endpoint + "$";
 
   return output;
 };
-
-Play Play::from_string(std::string const& play_string){
-  auto parts = split(play_string, '$');
-  auto cmd = Play(
-    parts[0],
-    to_bool(parts[1]),
-    std::stoi(parts[2]),
-    std::stoi(parts[3]),
-    to_bool(parts[4]),
-    std::stoi(parts[5]),
-    std::stoi(parts[6]),
-    parts[9],
-    parts[10]
-  );
-  cmd.is_running = to_bool(parts[7]);
-  cmd.is_paused = to_bool(parts[8]);
-  return cmd;
+std::string& Play::backchannel_endpoint(){
+  return m_backchannel_endpoint;
 };
+void Play::backchannel_endpoint(std::string const& backchannel_endpoint){
+  m_backchannel_endpoint = backchannel_endpoint;
+};
+void Play::from_string(Play& play, std::string const& command_string){
+  auto parts = split(command_string, '$');
+  play.backchannel_endpoint(parts[2]);
+};
+std::shared_ptr<Play> Play::from_string(std::string const& command_string){
+  auto parts = split(command_string, '$');
 
-void Play::from_string(Play &play,std::string const& play_string){
-  auto parts = split(play_string, '$');
-  play.filename = parts[0];
-  play.loop  = to_bool(parts[1]);
-  play.number_rgbd_sensors  = std::stoi(parts[2]);
-  play.max_fps  = std::stoi(parts[3]);
-  play.compressed  = to_bool(parts[4]);
-  play.start_frame  = std::stoi(parts[5]);
-  play.end_frame  = std::stoi(parts[6]);
-  play.is_running  = to_bool(parts[7]);
-  play.is_paused  = to_bool(parts[8]);
-  play.backchannel_endpoint  = parts[9];
-  play.stream_endpoint  = parts[10];
+  auto play = std::make_shared<Play>(parts[0], parts[1], parts[2]);
+
+  return play;
+};
+Play::~Play(){
+  std::cout << "DESTRUCTOR" << std::endl;
 };

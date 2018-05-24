@@ -1,54 +1,54 @@
-#ifndef record_hpp
-#define record_hpp
+#ifndef __RECORD_HPP_INCLUDED__
+#define __RECORD_HPP_INCLUDED__
 
+
+#include <thread>
 #include "../spdlog/include/spdlog/spdlog.h"
 #include "zmq.hpp"
-#include <memory>
-#include <stdio.h>
-#include <FileBuffer.hpp>
-#include <ChronoMeter.hpp>
-#include <string>
-#include <vector>
 #include "helpers.hpp"
-#include <iostream>
-#include "RGBDRIClient.hpp"
+#include "RGBDRI.hpp"
+#include "ChronoMeter.hpp"
+#include "FileBuffer.hpp"
 
 #define MAX_FRAMES_TO_RECORD 1800
 
+class RGBDRI;
+
 class Record{
-public:
-  std::string filename;
-  int number_rgbd_sensors;
-  int duration;
-  bool compressed;
-  std::string stream_endpoint;
-  std::string backchannel_endpoint;
-
-  Record(RGBDRIClient &client, std::string const& filename,std::string const& stream_endpoint, std::string const& backchannel_endpoint = "default");
-  Record(std::string const& filename,std::string const& stream_endpoint, std::string const& backchannel_endpoint = "default");
-  Record(std::string const& filename,std::string const& stream_endpoint, int number_rgbd_sensors,int duration,bool compressed, std::string const& backchannel_endpoint = "default");
-  void start();
-  void execute();
-  void stop();
-  std::string to_string();
-  static Record from_string(std::string const& record_string);
-  static void from_string(Record &record,std::string const& record_string);
-
-  bool is_running;
-  bool is_paused;
 private:
-  std::shared_ptr<zmq::context_t> ctx;
-  std::shared_ptr<zmq::socket_t> skt;
-  bool req_inited;
-  RGBDRIClient client;
+  //debugging
+  std::shared_ptr<spdlog::logger> m_console_logger;
 
-  std::shared_ptr<spdlog::logger> m_logger;
-  // RGBDRIClient client;
+  //data
+  std::string m_filename;
+  std::string m_stream_endpoint;
+  std::string m_status;
 
-  void init_req();
-  void init_rep();
+  //networking
+  std::shared_ptr<zmq::context_t> m_context;
+  std::shared_ptr<zmq::socket_t> m_req_socket;
+  std::string m_backchannel_endpoint;
 
+  //threads
+  std::shared_ptr<std::thread> m_remote_control_thread;
+  std::shared_ptr<std::thread> m_record_thread;
 
+public:
+  Record(RGBDRI& rgbdri, std::string const& filename, std::string const& stream_endpoint);
+  Record(std::string const& filename, std::string const& stream_endpoint, std::string const& backchannel_endpoint);
+  std::string status();
+  void start();
+  void stop();
+  void terminate();
+  void record_thread();
+  void enable_remote_control();
+  void remote_control_thread();
+  std::string to_string();
+  std::string& backchannel_endpoint();
+  void backchannel_endpoint(std::string const& backchannel_endpoint);
+  static void from_string(Record& record, std::string const& command_string);
+  static std::shared_ptr<Record> from_string(std::string const& command_string);
+  ~Record();
 };
 
 #endif

@@ -1,7 +1,3 @@
-add_executable(client client.cpp)
-target_link_libraries(client framework)
-install(TARGETS client DESTINATION bin)
-
 add_executable(server server.cpp)
 target_link_libraries(server framework)
 install(TARGETS server DESTINATION bin)
@@ -57,10 +53,6 @@ install(TARGETS sweep_sampler DESTINATION bin)
 add_executable(display_sweep display_sweep.cpp)
 target_link_libraries(display_sweep framework)
 install(TARGETS display_sweep DESTINATION bin)
-
-add_executable(test_stuff test_stuff.cpp)
-target_link_libraries(test_stuff framework)
-install(TARGETS test_stuff DESTINATION bin)
 
 add_executable(calibrate calibrate.cpp)
 target_link_libraries(calibrate framework)
